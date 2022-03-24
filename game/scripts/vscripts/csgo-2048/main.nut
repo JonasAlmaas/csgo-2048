@@ -20,11 +20,8 @@
     "utils/utils",
 ]
 
-::SCRIPTS_MANIFEST_MISC <- [
-    "lobby",
-]
-
 ::SCRIPTS_MANIFEST_GAME <- [
+    "game/board",
     "game/cell_handler",
     "game/cell",
     "game/main",
@@ -38,7 +35,6 @@
         }
     }
     include_manifest(SCRIPTS_MANIFEST_UTILITIES);
-    // include_manifest(SCRIPTS_MANIFEST_MISC);
     include_manifest(SCRIPTS_MANIFEST_GAME);
 }
 include_scripts();
@@ -52,26 +48,32 @@ include_scripts();
 /*
     Global variables
 */
+::player <- null;
+
 ::game <- null;
 ::initialized <- false;
 
-::update <- function () {
+/*
+    Functions
+*/
 
+::reset_session <- function () {
+    utils.remove_decals();
+    EntFireByHandle(point_viewcontroler, "disable", "", 0.0, null, null);
+    game.reset();
+}
+
+::update <- function () {
     calculate_tickrate();
 
     if (!initialized) {
-        get_entity_group();
+        setup_entity_group();
         
-        local target = null;
-        while ((target = Entities.FindByClassname(target, "*player*")) != null) {
-            if (target.GetClassname() == "player") {
-                EntFireByHandle(game_ui, "Activate", "", 0.0, target, null);
-                EntFireByHandle(point_viewcontroler, "enable", "", 0.0, target, null);
-                break;
-            }
+        setup_player_reference();
+        if (player) {
+            EntFireByHandle(game_ui, "Activate", "", 0.0, player.ref, null);
+            EntFireByHandle(point_viewcontroler, "enable", "", 0.0, player.ref, null);
         }
-
-        greet_player();
 
         game = new_game(4);
 
@@ -81,24 +83,19 @@ include_scripts();
     game.update();
 }
 
-::get_entity_group <- function () {
+::setup_entity_group <- function () {
     game_ui = EntityGroup[0];
     point_viewcontroler = EntityGroup[1];
 }
 
-::greet_player <- function () {
-    console.chat("\n " + console.color.grey + " -----------------------");
-    console.chat("\n " + console.color.grey + " ‎‏‏‎ ‎‏‏‎ ‎‏‏‎ ‏‏‎ ‎‏‏‎ ‎‏‏‎ ‎‏‏‎ ‏‏‎ ‎‏‏‎ ‎‏‏‎ ‎‏‏‎ ‏‏‎ 2048");
-    console.chat("\n " + console.color.red + " ‎‏‏‎ ‎‏‏‎ ‎‏‏‎ ‏‏‎ ‎‏‏‎ ‎‏‏‎ ‎‏‏‎ ‏‏‎ ‎‏‏‎ By Almaas");
-    console.chat("\n " + console.color.grey + " -----------------------");
-}
-
-::reset_session <- function () {
-    utils.remove_decals();
-
-    EntFireByHandle(point_viewcontroler, "disable", "", 0.0, null, null);
-
-    game.reset();
+::setup_player_reference <- function () {
+    local target = null;
+    while ((target = Entities.FindByClassname(target, "*player*")) != null) {
+        if (target.GetClassname() == "player") {
+            player = new_player(target);
+            break;
+        }
+    }
 }
 
 /*
