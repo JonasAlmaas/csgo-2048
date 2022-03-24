@@ -16,6 +16,6 @@
 DoIncludeScript(BASE_FOLDER + "main" + MODULE_EXT, null);
 
 function Precache() {
-    // precache_text_models(["kanit_semibold"]);
+    precache_text_models(["kanit_semibold"]);
     precache_2048();
 }
