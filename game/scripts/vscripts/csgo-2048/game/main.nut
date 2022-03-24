@@ -5,95 +5,32 @@ local targe_board_center = null;
 targe_board_center = Entities.FindByName(targe_board_center, "targe_board_center");
 ::pos_board_center <- targe_board_center.GetOrigin();
 
-// TODO: Fix the outside border, it should be as wide as the rest of the stuff.
-
 ::new_game <- function (board_res) {
-    
-    local cell_size = BOARD_SIZE / board_res;
-    local half_cell_size = cell_size * 0.5;
-
-    local half_board_size = BOARD_SIZE * 0.5;
-    local pos_top_left = pos_board_center + Vector(-half_board_size, half_board_size);
 
     local game = {
+        ANIMATION_TIME = 0.15,
+
+        board = null,
         cell_handler = null,
 
-        background_models = [],
-
         board_res = board_res,
-        half_board_size = half_board_size,
-        cell_size = cell_size,
-        half_cell_size = half_cell_size,
 
-        pos_top_left = pos_top_left,
+        game_won = false,
+        game_over = false,
 
-        initialized = false,
+        is_animating = false,
+        time_animation_start = 0,
 
         function init() {
-            cell_handler = new_cell_handler(board_res, pos_top_left, cell_size);
+            board = new_board(board_res);
+            cell_handler = new_cell_handler(board_res);
 
-            cell_handler.add_cell(2);
-            cell_handler.add_cell(2);
-
-            // for (local i = 0; i < 10; i++) {
-            //     cell_handler.add_cell(pow(2, RandomInt(1, 17)));
-            // }
-
-            for (local x = 0; x < board_res; x++) {
-                for (local y = 0; y < board_res; y++) {
-                    // Background
-                    {
-                        local prop = new_prop_dynamic();
-                        prop.set_scale(cell_size);
-                        prop.set_color(COLOR.BACKGROUND);
-                        prop.disable_shadows();
-
-                        local pos = pos_top_left + Vector(cell_size * x + half_cell_size, -(cell_size * y + half_cell_size));
-                        prop.teleport(pos);
-
-                        // Top left
-                        if (x == 0 && y == 0) {
-                            prop.set_model(GAME_MODEL.BACKGROUND_CORNER);
-                        }
-                        // Top Right
-                        else if (x == board_res - 1 && y == 0) {
-                            prop.set_model(GAME_MODEL.BACKGROUND_CORNER);
-                            prop.teleport(null, Vector(0, 270));
-                        }
-                        // Bottom Left
-                        else if (x == 0 && y == board_res - 1) {
-                            prop.set_model(GAME_MODEL.BACKGROUND_CORNER);
-                            prop.teleport(null, Vector(0, 90));
-                        }
-                        // Bottom Right
-                        else if (x == board_res - 1 && y == board_res - 1) {
-                            prop.set_model(GAME_MODEL.BACKGROUND_CORNER);
-                            prop.teleport(null, Vector(0, 180));
-                        }
-                        // Fillers
-                        else {
-                            prop.set_model(GAME_MODEL.BACKGROUND_CELL);
-                        }
-                        background_models.append(prop);
-                    }
-                    
-                    // Background Grid
-                    {
-                        local prop = new_prop_dynamic();
-                        prop.set_scale(cell_size);
-                        prop.set_color(COLOR.CELLS[0]);
-                        prop.set_model(GAME_MODEL.CELL);
-                        prop.disable_shadows();
-                        local new_pos = pos_top_left + Vector(cell_size * x + half_cell_size, -(cell_size * y + half_cell_size), BOARD_OFFSET);
-                        prop.teleport(new_pos);
-                        background_models.append(prop);
-                    }
-                }
-            }
+            cell_handler.add_new_cell();
+            cell_handler.add_new_cell();
         }
 
         function reset() {
-            disable_models(background_models);
+            board.reset();
             cell_handler.reset();
         }
 
@@ -103,28 +40,43 @@ targe_board_center = Entities.FindByName(targe_board_center, "targe_board_center
         }
 
         function update() {
-            if (InputState.Forward) {
-                InputState.Forward = false;
-                cell_handler.shift_up();
-            }
-            else if (InputState.Back) {
-                InputState.Back = false;
-                cell_handler.shift_down();
-            }
-            else if (InputState.Left) {
-                InputState.Left = false;
-                cell_handler.shift_left();
-            }
-            else if (InputState.Right) {
-                InputState.Right = false;
-                cell_handler.shift_right();
+            if (!game_over){
+                if (is_animating) {
+                    local time_current = Time();
+                    local percent = (time_current - time_animation_start) / ANIMATION_TIME;
+
+                    cell_handler.think(percent);
+
+                    if (percent > 1) {
+                        is_animating = false;
+
+                        game_won = cell_handler.after_shift();
+                        game_over = cell_handler.is_game_over()
+
+                        if (game_won) {
+                            console.log("Game Won!");
+                            game_over = true;
+                        }
+                        else if (game_over) {
+                            console.log("Game Over!");
+                        }
+                        else {
+                            cell_handler.add_new_cell();
+                        }
+                    }
+                }
+                else {
+                    if (InputState.Forward)                 { if (cell_handler.try_shift(DIRECTION.UP))     { start_animation(); }}
+                    if (!is_animating && InputState.Back)   { if (cell_handler.try_shift(DIRECTION.DOWN))   { start_animation(); }}
+                    if (!is_animating && InputState.Left)   { if (cell_handler.try_shift(DIRECTION.LEFT))   { start_animation(); }}
+                    if (!is_animating && InputState.Right)  { if (cell_handler.try_shift(DIRECTION.RIGHT))  { start_animation(); }}
+                }
             }
         }
 
-        function disable_models(models) {
-            foreach (model in models) {
-                model.disable();
-            }
+        function start_animation() {
+            is_animating = true;
+            time_animation_start = Time();
         }
     }
     game.init();
