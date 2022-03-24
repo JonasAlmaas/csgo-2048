@@ -1,29 +1,30 @@
 
-::new_cell_handler <- function (board_res, pos_top_left, cell_size) {
+::new_cell_handler <- function (board_res) {
+
     local handler = {
         cells = [],
 
         board_res = board_res,
-        pos_top_left = pos_top_left,
-        cell_size = cell_size,
-        half_cell_size = cell_size * 0.5,
 
         function reset() {
             foreach (cell in cells) {
                 cell.reset();
             }
+            cells = [];
         }
 
-        /*
-            Return
-                true    Everything is fine
-                false   Game Over
-        */
-        function add_cell(value) {
-            if (pow(board_res, 2) == cells.len()) {
-                return false;
+        function think(percent) {
+            foreach (cell in cells) {
+                if (cell.target_pos != null) {
+                    cell.think(percent);
+                }
             }
+        }
 
+        function add_new_cell() {
+            // TODO: Should be 2 most of the time, but 4 sometimes
+            local value = 2;
+            
             local x = null;
             local y = null;
             local cell = null;
@@ -37,10 +38,8 @@
             } while (cell != null && index < 500)
 
             if (cell == null) {
-                cells.append(new_cell(x, y, value, pos_top_left, cell_size));
+                cells.append(new_cell(x, y, value, board_res));
             }
-
-            return true;
         }
 
         function get_cell(x, y) {
@@ -52,65 +51,153 @@
             return null;
         }
 
-        function shift_up() {
+        function get_cell_from_array(x, y, array) {
+            foreach (cell in array) {
+                if (cell.pos.x == x && cell.pos.y == y) {
+                    return cell;
+                }
+            }
+            return null;
+        }
+
+        function get_cell_from_target_pos(x, y) {
+            foreach (cell in cells) {
+                if (cell.target_pos != null) {
+                    if (cell.target_pos.x == x && cell.target_pos.y == y) {
+                        return cell;
+                    }
+                }
+                else if (cell.pos.x == x && cell.pos.y == y) {
+                    return cell;
+                }
+            }
+            return null;
+        }
+
+        function after_shift() {
+            local game_won = false;
+            local new_cells = [];
             for (local x = 0; x < board_res; x++) {
-                for (local y = 1; y < board_res; y++) {
+                for (local y = 0; y < board_res; y++) {
+                    if (get_cell_from_array(x, y, new_cells))
+                        continue
+
                     local cell = get_cell(x, y);
-                    local colliding_cell = null;
-
-                    if (cell != null) {
-                        local i = 0;
-                        do {
-                            i++;
-                            colliding_cell = get_cell(x, y-i);
-                        } while (colliding_cell == null && y-i > 0)
-
-                        if (colliding_cell != null) {
-                            cell.shift_to(x, y-i+1);
+                    if (cell) {
+                        local value = cell.value;
+                        if (cell.merged) {
+                            value = value * 2;
+                            if (value >= 2048) {
+                                game_won = true;
+                            }
                         }
-                        else {
-                            cell.shift_to(x, y-i);
+                        new_cells.append(new_cell(x, y, value, board_res));
+                    }
+                }
+            }
+            reset();
+            cells = new_cells;
+            return game_won;
+        }
+
+        function is_game_over() {
+            return (cells.len() >= pow(board_res, 2));
+        }
+        
+        function try_shift(dir) {
+            local can_shift = false;
+
+            for (local a = 0; a < board_res; a++) {
+                for (local b = 1; b < board_res; b++) {
+                    local cell = null;
+                    local x = -1;
+                    local y = -1;
+
+                    switch (dir) {
+                        case DIRECTION.UP:      { x = a; y = b; break; }
+                        case DIRECTION.DOWN:    { x = a; y = board_res - 1 - b; break; }
+                        case DIRECTION.LEFT:    { x = b; y = a; break; }
+                        case DIRECTION.RIGHT:   { x = board_res - 1 - b; y = a; break; }
+                    }
+
+                    cell = get_cell(x, y);
+
+                    if (cell == null)
+                        continue;
+
+                    local colliding_cell = null;
+                    local i = 0;
+                    switch (dir) {
+                        case DIRECTION.UP:
+                        {
+                            do {
+                                i++;
+                                colliding_cell = get_cell_from_target_pos(x, y-i);
+                            } while (colliding_cell == null && y-i > 0)
+                            break;
+                        }
+                        case DIRECTION.DOWN:
+                        {
+                            do {
+                                i++;
+                                colliding_cell = get_cell_from_target_pos(x, y+i);
+                            } while (colliding_cell == null && y+i < board_res - 1)
+                            break;
+                        }
+                        case DIRECTION.LEFT:
+                        {
+                            do {
+                                i++;
+                                colliding_cell = get_cell_from_target_pos(x-i, y);
+                            } while (colliding_cell == null && x-i > 0)
+                            break;
+                        }
+                        case DIRECTION.RIGHT:
+                        {
+                            do {
+                                i++;
+                                colliding_cell = get_cell_from_target_pos(x+i, y);
+                            } while (colliding_cell == null && x+i < board_res - 1)
+                            break;
                         }
                     }
 
+                    if (i > 1 || (i == 1 && colliding_cell == null) || (i == 1 && colliding_cell && cell.value == colliding_cell.value)) {
+                        can_shift = true;
+                    }
 
-                    // if (cell) {
-                    //     // Check for merge
-                    //     local colliding_cell = get_cell(x-1, y);
-                    //     if (colliding_cell != null) {
-                    //         if (colliding_cell.value == value) {
-                    //         }
-                    //     }
-                    //     else {
-                    //         cell.shift_to(x-1, y)
-                    //     }
-                    // }
+                    if (colliding_cell) {
+                        if (cell.value == colliding_cell.value && !colliding_cell.merged) {
+                            cell.merged = true;
+                            colliding_cell.merged = true;
+                            switch (dir) {
+                                case DIRECTION.UP:      { cell.shift_to(x, y-i); break; }
+                                case DIRECTION.DOWN:    { cell.shift_to(x, y+i); break; }
+                                case DIRECTION.LEFT:    { cell.shift_to(x-i, y); break; }
+                                case DIRECTION.RIGHT:   { cell.shift_to(x+i, y); break; }
+                            }
+                        }
+                        else {
+                            switch (dir) {
+                                case DIRECTION.UP:      { cell.shift_to(x, y-i+1); break; }
+                                case DIRECTION.DOWN:    { cell.shift_to(x, y+i-1); break; }
+                                case DIRECTION.LEFT:    { cell.shift_to(x-i+1, y); break; }
+                                case DIRECTION.RIGHT:   { cell.shift_to(x+i-1, y); break; }
+                            }
+                        }
+                    }
+                    else {
+                        switch (dir) {
+                            case DIRECTION.UP:      { cell.shift_to(x, y-i); break; }
+                            case DIRECTION.DOWN:    { cell.shift_to(x, y+i); break; }
+                            case DIRECTION.LEFT:    { cell.shift_to(x-i, y); break; }
+                            case DIRECTION.RIGHT:    { cell.shift_to(x+i, y); break; }
+                        }
+                    }
                 }
             }
-        }
-        
-        function shift_down() {
-            // for (local x = 0; x < board_res; x++) {
-            //     for (local y = 0; y < board_res; y++) {
-                    
-            //     }
-            // }
-        }
 
-        function shift_left() {
-            // for (local x = 0; x < board_res; x++) {
-            //     for (local y = 0; y < board_res; y++) {
-                    
-            //     }
-            // }
-        }
-        
-        function shift_right() {
-            // for (local x = 0; x < board_res; x++) {
-            //     for (local y = 0; y < board_res; y++) {
-                    
-            //     }
-            // }
+            return can_shift;
         }
     }
     return handler;
